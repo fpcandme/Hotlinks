@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotlink Builder</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:16px;max-width:980px}
+  h1{font-size:22px;margin:0 0 6px}
+  .small{color:#666;font-size:13px}
+  .card{border:1px solid #ddd;border-radius:10px;padding:12px;margin-top:12px}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  input,button{font-size:16px;padding:10px;border-radius:8px;border:1px solid #ccc}
+  button{cursor:pointer;background:#f5f5f5}
+  button:hover{background:#eee}
+  .addWrap{text-align:center;margin-top:10px}
+  .contacts{display:grid;gap:10px;margin-top:10px}
+  .contact{border:1px solid #eee;border-radius:10px;padding:10px}
+  .contact-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .name{font-weight:800}
+  .num{color:#555;font-variant-numeric:tabular-nums}
+  .btns{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+  a.action{text-decoration:none;border:1px solid #ccc;padding:8px 12px;border-radius:8px;color:#000;background:#f9f9f9}
+  a.action:hover{background:#eee}
+  /* red-tinted delete controls with black text */
+  .danger{border:1px solid #c33;background:#f4b6b6;color:#000}
+  .danger:hover{background:#ee9e9e}
+  .footer-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+</style>
+</head>
+<body>
+
+<h1>Hotlink Builder</h1>
+<div class="small">Add people, then open <b>Export Page</b> (a real webpage on GitHub Pages).</div>
+
+<div class="card">
+  <div class="row">
+    <input id="first" placeholder="First Name">
+    <input id="last"  placeholder="Last Name">
+    <input id="phone" placeholder="Phone (e.g., 207-555-1234)" inputmode="tel">
+  </div>
+
+  <div class="addWrap">
+    <button id="add">Add Person</button>
+  </div>
+
+  <div class="small" style="margin-top:8px;">
+    Tip: Press <b>Enter</b> in the phone box to save and jump to the next person.
+  </div>
+</div>
+
+<div class="card">
+  <div style="font-weight:800;margin-bottom:6px;">People</div>
+  <div id="preview" class="contacts"></div>
+
+  <div class="footer-actions">
+    <button id="export">Open Export Page</button>
+    <button id="clear" class="danger">Clear All</button>
+  </div>
+
+  <div class="small" style="margin-top:8px;">
+    Export opens <code>export.html</code> (not a downloaded file).
+  </div>
+</div>
+
+<script>
+  const STORAGE = "hotlink_contacts_shared_v1";
+  const $ = id => document.getElementById(id);
+
+  function normalizePhone(input){
+    input = (input||"").trim();
+    const plus = input.startsWith("+") ? "+" : "";
+    const digits = input.replace(/[^\d]/g,"");
+    return digits ? plus + digits : "";
+  }
+
+  function prettyPhone(input){
+    const d = (input||"").replace(/[^\d]/g,"");
+    if(d.length===10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+    if(d.length===11 && d.startsWith("1")) return `+1 (${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+    return input;
+  }
+
+  function esc(s){
+    return String(s??"")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+
+  let contacts = [];
+  try { contacts = JSON.parse(localStorage.getItem(STORAGE) || "[]"); } catch { contacts = []; }
+
+  function save(){ localStorage.setItem(STORAGE, JSON.stringify(contacts)); }
+
+  function fullName(c){
+    return [c.first, c.last].map(x => (x||"").trim()).filter(Boolean).join(" ");
+  }
+
+  function add(){
+    const first = $("first").value.trim();
+    const last  = $("last").value.trim();
+    const raw   = $("phone").value.trim();
+    const norm  = normalizePhone(raw);
+
+    if(!first || !norm){
+      alert("Please enter at least a First Name and a valid phone number.");
+      return;
+    }
+
+    contacts.push({ first, last, phone:norm, display: prettyPhone(raw) });
+    save();
+
+    $("first").value=""; $("last").value=""; $("phone").value="";
+    $("first").focus();
+
+    render();
+  }
+
+  function del(i){
+    contacts.splice(i,1);
+    save();
+    render();
+  }
+
+  function render(){
+    const p = $("preview");
+    p.innerHTML = "";
+
+    if(!contacts.length){
+      p.innerHTML = `<div class="small">No people added.</div>`;
+      return;
+    }
+
+    contacts.forEach((c,i) => {
+      const div = document.createElement("div");
+      div.className = "contact";
+      div.innerHTML = `
+        <div class="contact-head">
+          <div>
+            <div class="name">${esc(fullName(c) || "Unnamed")}</div>
+            <div class="num">${esc(c.display)}</div>
+          </div>
+          <button class="danger" data-del="${i}">Remove</button>
+        </div>
+        <div class="btns">
+          <a class="action" href="tel:${c.phone}">📞 Call</a>
+          <a class="action" href="sms:${c.phone}">💬 Text</a>
+        </div>
+      `;
+      p.appendChild(div);
+    });
+
+    p.querySelectorAll("button[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => del(parseInt(btn.getAttribute("data-del"),10)));
+    });
+  }
+
+  $("add").addEventListener("click", add);
+  $("phone").addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){ e.preventDefault(); add(); }
+  });
+
+  $("export").addEventListener("click", () => {
+    // Real URL on your GitHub Pages site (not blocked)
+    window.location.href = "export.html";
+  });
+
+  $("clear").addEventListener("click", () => {
+    if(!confirm("Clear all people?")) return;
+    contacts = [];
+    save();
+    render();
+    $("first").focus();
+  });
+
+  render();
+  $("first").focus();
+</script>
+
+</body>
+</html>
